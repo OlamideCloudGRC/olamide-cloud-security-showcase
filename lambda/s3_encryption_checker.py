@@ -25,6 +25,9 @@ import os
 #==========================================#
 #                Constants                 #
 #==========================================#
+# Compliance standards mapped to automated detection, containment,
+# and incident response controls for audit traceability.
+
 COMPLIANCE_STANDARDS = [
     # Encryption of stored PANS
     "PCI-DSS 4.0 Requirement 3.3.1",
@@ -42,6 +45,7 @@ REQUIRED_ENCRYPTION = ["aws:kms"]
 #==========================================#
 #             Service Clients              #
 #==========================================#
+"""Establish connection with the needed services"""
 s3 = boto3.client('s3')
 securityhub = boto3.client('securityhub', config=Config(
    retries = {
@@ -61,10 +65,16 @@ cloudwatch = boto3.client('cloudwatch')
 
 # Define the severity levels Enum class
 class SeverityLevel(IntEnum):
+   """
+    Enum for standardizing severity levels across logging,
+    Security Hub reporting, and metrics.
+    """
    CRITICAL = 4  # Compliance Violations (e.g., unencrypted upload)
    HIGH = 3      # Security misconfiguration (e.g., misconfigured KMS policies)
    MEDIUM = 2    # Operational warnings (e.g., timeouts or retries)
-   LOW = 1       # Informational (e.g., successful encryption check)
+   LOW = 1       # Informational (eg, process started/completed)
+   INFO = 0      # Successful execution
+
 
 # Define Encryption violations Exception class
 class EncryptionViolations(Exception):
@@ -238,7 +248,8 @@ def report_to_security_hub(violation: Dict) -> Dict:
          SeverityLevel.CRITICAL: "CRITICAL",
          SeverityLevel.HIGH: "HIGH",
          SeverityLevel.MEDIUM: "MEDIUM",
-         SeverityLevel.LOW: "LOW"
+         SeverityLevel.LOW: "LOW",
+         SeverityLevel.INFO: "INFO"
       }  
 
       # Get severity label
@@ -291,7 +302,7 @@ def report_to_security_hub(violation: Dict) -> Dict:
       # Log successful submission for audit trail
       log_compliance_event(
          message= "Security Hub submission succeeded",
-         severity= SeverityLevel.LOW,
+         severity= SeverityLevel.INFO,
          reason= "Successful first-attempt delivery to Security Hub",
          finding_id= finding_id
       )
@@ -487,7 +498,7 @@ def lambda_handler(event: Dict, context) -> Dict:
             try:
                log_compliance_event(
                   f"Compliant encryption: s3://{bucket}/{key}",
-                  SeverityLevel.LOW,
+                  SeverityLevel.INFO,
                   **result
                )
                print("Compliance log for successful encryption done")
@@ -519,7 +530,7 @@ def lambda_handler(event: Dict, context) -> Dict:
 
                log_compliance_event(
                   f"Remediation attempt: {remediation_status['status']}",
-                  severity= SeverityLevel.LOW if remediation_status['status'] == "SUCCESS" else SeverityLevel.CRITICAL,
+                  severity= SeverityLevel.INFO if remediation_status['status'] == "SUCCESS" else SeverityLevel.CRITICAL,
                   bucket= e.bucket,
                   key= e.key,
                   found_encryption= e.found_encryption
