@@ -1262,3 +1262,114 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.guardduty_ec2_compromise_rule.arn
 }
 
+# Create KMS Key for EBS encryption
+resource "aws_kms_key" "ebs_encryption" {
+  description             = " This key is used to encrypt EBS"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# Aliasing the KMS Key
+resource "aws_kms_alias" "ebs_encryption" {
+  name          = "alias/ebs_encryption"
+  target_key_id = aws_kms_key.ebs_encryption.key_id
+}
+
+
+
+# KMS Key Policy
+resource "aws_kms_key_policy" "ebs_key_policy" {
+  key_id = aws_kms_key.ebs_encryption.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Allows the Autoscaling service-linked role to use the key for encrypted RBS volumes
+        Sid    = "AllowAutoScalingServiceLinkedRoleToUseKeyForEBS"
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext",
+          "kms:DescribeKey"
+        ],
+        Resource = "*",
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" : data.aws_caller_identity.current.account_id
+            "kms:ViaService" : "ec2.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
+
+      },
+      {
+        Sid    = "AllowAutoScalingServiceLinkedRoleToCreateGrant"
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        Action = [
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:RevokeGrant"
+        ],
+        Resource = "*"
+
+        Condition = {
+          Bool = {
+            "kms:GrantIsForAWSResource" = "true"
+          }
+
+          StringEquals = {
+            "kms:CallerAccount" : data.aws_caller_identity.current.account_id
+            "kms:ViaService" : "ec2.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
+
+      },
+      {
+        # Allows the AWS account to manage access through IAM policies
+        Sid    = "EnableRootAccountKeyAdministration"
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action = [
+          "kms:*"
+        ],
+        Resource = "*"
+      },
+
+      # Allow Terraform role to manage key
+      {
+        Sid    = "AllowTerraformRoleToManageKey"
+        Effect = "Allow"
+        Principal = {
+          AWS = var.terraform_exec_role_arn
+        }
+
+        Action = [
+          "kms:CreateAlias",
+          "kms:DescribeKey",
+          "kms:GetKeyPolicy",
+          "kms:PutKeyPolicy",
+          "kms:ListResourceTags",
+          "kms:TagResource"
+        ]
+        Resource = "*"
+
+      }
+    ]
+  })
+}

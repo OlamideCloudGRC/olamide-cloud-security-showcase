@@ -57,7 +57,7 @@ resource "aws_launch_template" "web_lt" {
     ebs {
       volume_size           = 20
       volume_type           = "gp3"
-      encrypted             = false
+      encrypted             = true
       delete_on_termination = true
 
     }
