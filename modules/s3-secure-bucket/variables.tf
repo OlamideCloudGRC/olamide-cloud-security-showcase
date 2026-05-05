@@ -71,3 +71,33 @@ variable "enforce_kms_uploads" {
   default     = true
 }
 
+variable "transition_storage_class" {
+  description = "S3 storage class to transition objects to after the configured number of days."
+  type        = string
+  default     = "STANDARD_IA"
+
+  validation {
+    condition = contains([
+      "STANDARD_IA",
+      "ONEZONE_IA",
+      "INTELLIGENT_TIERING",
+      "GLACIER_IR",
+      "GLACIER",
+      "DEEP_ARCHIVE"
+    ], var.transition_storage_class)
+
+    error_message = "transition_storage_class must be one of: STANDARD_IA, ONEZONE_IA, INTELLIGENT_TIERING, GLACIER_IR, GLACIER, DEEP_ARCHIVE."
+  }
+}
+
+variable "kms_key_arn" {
+  description = "KMS key ARN used for S3 server-side encryption."
+  type        = string
+}
+
+variable "enable_lifecycle_rule" {
+  description = "Whether to create the S3 lifecycle rule."
+  type        = bool
+  default     = true
+}
+
