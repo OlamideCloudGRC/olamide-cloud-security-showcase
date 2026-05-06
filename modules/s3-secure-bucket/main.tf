@@ -3,7 +3,7 @@ locals {
     var.tags,
     {
       Name        = var.bucket_name
-      Environment = var.environment
+      Environment = lower(var.environment)
     }
   )
 }
@@ -77,4 +77,74 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
   }
 
+}
+
+# Build a bucket policy that denies object uploads unless AWS KMS encryption is used.
+data "aws_iam_policy_document" "enforce_kms_uploads" {
+  count = var.enforce_kms_uploads ? 1 : 0
+
+  statement {
+    sid    = "DenyIncorrectEncryptionHeader"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "s3:PutObject"
+    ]
+
+    resources = [
+      "${aws_s3_bucket.this.arn}/*"
+    ]
+
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+  }
+
+  statement {
+    sid    = "DenyUnencryptedObjectUploads"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "s3:PutObject"
+    ]
+
+    resources = [
+      "${aws_s3_bucket.this.arn}/*"
+    ]
+
+    condition {
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["true"]
+    }
+  }
+}
+
+# Attach the encryption enforcement policy when KMS upload enforcement is enabled.
+resource "aws_s3_bucket_policy" "this" {
+  count  = var.enforce_kms_uploads ? 1 : 0
+  bucket = aws_s3_bucket.this.id
+  policy = data.aws_iam_policy_document.enforce_kms_uploads[0].json
+}
+
+# Enforce bucket-owner ownership and disable ACL-based ownership behavior.
+# This supports a modern S3 security posture where access is controlled through IAM and bucket policies.
+resource "aws_s3_bucket_ownership_controls" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
 }

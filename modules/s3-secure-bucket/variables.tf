@@ -9,12 +9,12 @@ variable "bucket_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment such as Dev, Test, Staging, or Prod."
+  description = "Deployment environment such as dev, test, staging, or prod."
   type        = string
 
   validation {
-    condition     = contains(["Dev", "Test", "Staging", "Prod"], var.environment)
-    error_message = "Environment must be one of: Dev, Test, Staging, Prod."
+    condition     = contains(["dev", "test", "staging", "prod"], lower(var.environment))
+    error_message = "Environment must be one of: dev, test, staging, prod."
   }
 }
 
