@@ -65,12 +65,6 @@ variable "expiration_days" {
   default     = 365
 }
 
-variable "enforce_kms_uploads" {
-  description = "Deny object uploads that do not use aws:kms encryption."
-  type        = bool
-  default     = true
-}
-
 variable "transition_storage_class" {
   description = "S3 storage class to transition objects to after the configured number of days."
   type        = string

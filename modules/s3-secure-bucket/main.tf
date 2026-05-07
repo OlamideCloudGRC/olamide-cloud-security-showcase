@@ -79,9 +79,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 
 }
 
-# Build a bucket policy that denies object uploads unless AWS KMS encryption is used.
-data "aws_iam_policy_document" "enforce_kms_uploads" {
-  count = var.enforce_kms_uploads ? 1 : 0
+# Build a bucket policy that enforces secure transport and KMS-encrypted uploads.
+data "aws_iam_policy_document" "bucket_policy" {
 
   statement {
     sid    = "DenyIncorrectEncryptionHeader"
@@ -130,13 +129,37 @@ data "aws_iam_policy_document" "enforce_kms_uploads" {
       values   = ["true"]
     }
   }
+
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "s3:*"
+    ]
+
+    resources = [
+      aws_s3_bucket.this.arn,
+      "${aws_s3_bucket.this.arn}/*"
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 # Attach the encryption enforcement policy when KMS upload enforcement is enabled.
 resource "aws_s3_bucket_policy" "this" {
-  count  = var.enforce_kms_uploads ? 1 : 0
   bucket = aws_s3_bucket.this.id
-  policy = data.aws_iam_policy_document.enforce_kms_uploads[0].json
+  policy = data.aws_iam_policy_document.bucket_policy.json
 }
 
 # Enforce bucket-owner ownership and disable ACL-based ownership behavior.
